@@ -1,7 +1,7 @@
 import sys
 import os
 real_dir=os.getcwd()
-sys.path.append(real_dir)
+# sys.path.append(real_dir)
 
 
 
