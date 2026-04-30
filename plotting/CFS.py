@@ -1038,27 +1038,34 @@ def plot_all_fault_segments(results, extent=None):
 # 新增：改进的Rate-State模型触发概率计算
 def rate_state_probability(dCFS, tau, A_sigma, t_elapsed, b=0.01):
     """
-    改进的Rate-State触发概率模型
-    
+    Dieterich (1994) Rate-State 触发概率模型
+    基于原文方程 (11)(12)(14)
+
     参数:
-    dCFS      : 库仑应力变化 (Pa)
-    tau       : 特征衰减时间 (年)
-    A_sigma   : 状态依赖参数 (Pa)
-    t_elapsed : 距上次主震时间 (年)
-    b         : 背景发生率调整系数
+    dCFS      : 库仑应力变化 ΔCFS，对应原文 Δτ (Pa)
+    tau       : 弛豫时间 t_a = Aσ / τ̇_r (年)，对应原文 t_a
+    A_sigma   : 状态依赖参数 Aσ (Pa)，对应原文 Aσ
+    t_elapsed : 应力阶跃后经过的时间 t (年)
+    b         : 背景地震率 r (events/yr)，对应原文 r
+
+    返回:
+    P         : 泊松过程触发概率 [0, 1]
     """
-    # 1. 应力变化项
-    stress_term = np.exp(dCFS / A_sigma)
-    
-    # 2. 时间衰减项 (Omori-Utsu律)
-    time_term = 1 / (1 + t_elapsed/tau)
-    
-    # 3. 背景发生率
-    background_rate = b * np.ones_like(dCFS)
-    
-    # 4. 组合概率
-    lambda_t = stress_term * time_term + background_rate
-    return 1 - np.exp(-lambda_t)
+    # 原文方程 (12): R(t) = r / { [exp(-ΔCFS/Aσ) - 1] · exp(-t/t_a) + 1 }
+    exp_neg   = np.exp(-dCFS / A_sigma)          # exp(-ΔCFS / Aσ)
+    decay     = np.exp(-t_elapsed / tau)          # exp(-t / t_a)
+    R         = b / ((exp_neg - 1.0) * decay + 1.0)
+
+    # 对 R(t) 在 [0, t_elapsed] 上的解析积分:
+    # ∫₀ᵀ R(t)dt = r · t_a · ln[ (exp(T/t_a) - 1 + exp(ΔCFS/Aσ)) / (exp(ΔCFS/Aσ) - 1) ]
+    exp_pos   = np.exp( dCFS / A_sigma)           # exp(+ΔCFS / Aσ)
+    exp_T     = np.exp( t_elapsed / tau)          # exp(T / t_a)
+    integral  = b * tau * np.log(
+        (exp_T - 1.0 + exp_pos) / (exp_pos - 1.0)
+    )
+
+    # 泊松过程概率转换: P = 1 - exp(-∫R dt)
+    return 1.0 - np.exp(-integral)
 
 
 # 8. 验证地震目录可靠性
